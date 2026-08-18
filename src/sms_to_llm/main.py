@@ -1,16 +1,10 @@
 from fastapi import FastAPI
 
-from sms_to_llm.__about__ import __version__
-from sms_to_llm.schemas import HealthResponse, VersionResponse
+from sms_to_llm.endpoints import sms_router
+from sms_to_llm.endpoints.health import router as health_router
+from sms_to_llm.endpoints.version import router as version_router
 
 app = FastAPI(title="sms-to-llm")
-
-
-@app.get("/version", response_model=VersionResponse)
-def get_version() -> VersionResponse:
-    return VersionResponse(version=__version__)
-
-
-@app.get("/health", response_model=HealthResponse)
-def get_health() -> HealthResponse:
-    return HealthResponse(status="ok")
+app.include_router(version_router)
+app.include_router(health_router)
+app.include_router(sms_router)
