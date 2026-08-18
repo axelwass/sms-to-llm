@@ -1,0 +1,58 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sms-to-llm"
+version = "0.1.0"
+description = "Interview-ready FastAPI service skeleton"
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [
+  { name = "Axel" },
+]
+dependencies = [
+  "fastapi[standard]>=0.116.0,<1.0.0",
+  "pydantic>=2.11.0,<3.0.0",
+]
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28.0,<1.0.0",
+  "pre-commit>=4.0.0,<5.0.0",
+  "pyright>=1.1.400,<2.0.0",
+  "pytest>=8.4.0,<9.0.0",
+  "ruff>=0.12.0,<1.0.0",
+]
+
+[tool.hatch.envs.default.scripts]
+format = "ruff format ."
+lint = "ruff check ."
+test = "pytest"
+typecheck = "pyright"
+hooks = "uv run pre-commit run --all-files"
+check = [
+  "ruff check .",
+  "pyright",
+  "pytest",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "C4", "SIM"]
+
+[tool.pyright]
+pythonVersion = "3.11"
+include = ["src", "tests"]
+typeCheckingMode = "strict"
+reportMissingTypeStubs = false
+reportUntypedFunctionDecorator = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sms_to_llm"]
