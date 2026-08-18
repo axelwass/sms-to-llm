@@ -56,11 +56,6 @@ Example responses:
 ## Run locally
 
 ```bash
-uv run fastapi dev src/sms_to_llm/main.py
+uv run sms-to-llm
 ```
-
-or:
-
-```bash
-uv run python -m uvicorn sms_to_llm.main:app --reload
 ```
