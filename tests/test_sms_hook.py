@@ -3,10 +3,12 @@ from unittest.mock import Mock
 
 from pytest import MonkeyPatch
 
+from sms_to_llm.config import SettingsWithoutEnv
 from sms_to_llm.database.base import BaseDatabase
 from sms_to_llm.llm.base import BaseLLM
 from sms_to_llm.schema.conversation import ConversationMessage
 from sms_to_llm.schema.sms import SmsIncomingMessage
+from sms_to_llm.service.feedback_loop import FeedbackLoopService
 from sms_to_llm.service.sms_hook import SmsHookService
 
 llm = Mock(spec=BaseLLM)
@@ -115,7 +117,13 @@ def test_test_sms_hook_accepts_valid_bearer_token(
 
 
 def test_sms_hook_service_builds_history_and_sends_response() -> None:
-    service = SmsHookService(llm=llm, database=database, history_limit=2)
+    service = SmsHookService(
+        llm=llm,
+        database=database,
+        settings=SettingsWithoutEnv(),
+        feedback_loop=FeedbackLoopService(database=database),
+        history_limit=2,
+    )
 
     payload = SmsIncomingMessage.model_validate(
         {
@@ -156,7 +164,13 @@ def test_sms_hook_service_short_circuits_on_feedback_input() -> None:
         database.get_last_message.return_value.model_copy(update={"feedback": "positive"})
     )
 
-    service = SmsHookService(llm=llm, database=database, history_limit=2)
+    service = SmsHookService(
+        llm=llm,
+        database=database,
+        settings=SettingsWithoutEnv(),
+        feedback_loop=FeedbackLoopService(database=database),
+        history_limit=2,
+    )
 
     payload = SmsIncomingMessage.model_validate(
         {

@@ -1,5 +1,5 @@
 import json
-from typing import Any
+from typing import Annotated, Any
 from urllib.parse import parse_qs
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -8,6 +8,7 @@ from twilio.twiml.messaging_response import MessagingResponse
 
 from sms_to_llm.auth.authorization import require_user_key
 from sms_to_llm.config import Settings
+from sms_to_llm.dependencies import get_sms_hook_service
 from sms_to_llm.schema.sms import SmsHookResponse, SmsIncomingMessage
 from sms_to_llm.service.sms_hook import SmsHookService
 
@@ -54,7 +55,10 @@ async def _extract_sms_payload(request: Request) -> SmsIncomingMessage:
 
 
 @router.post("/hook")
-async def receive_sms_hook(request: Request) -> Response:
+async def receive_sms_hook(
+    request: Request,
+    service: Annotated[SmsHookService, Depends(get_sms_hook_service)],
+) -> Response:
     settings = Settings()
     payload = await _extract_sms_payload(request)
 
@@ -71,7 +75,6 @@ async def receive_sms_hook(request: Request) -> Response:
         if not valid:
             raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
-    service = SmsHookService()
     response = service.accept_message(payload)
 
     twiml = MessagingResponse()
@@ -84,8 +87,10 @@ async def receive_sms_hook(request: Request) -> Response:
     response_model=SmsHookResponse,
     dependencies=[Depends(require_user_key)],
 )
-async def receive_test_sms_hook(payload: SmsIncomingMessage) -> SmsHookResponse:
-    service = SmsHookService()
+async def receive_test_sms_hook(
+    payload: SmsIncomingMessage,
+    service: Annotated[SmsHookService, Depends(get_sms_hook_service)],
+) -> SmsHookResponse:
     response = service.accept_message(payload)
     if payload.timestamp is None:
         return response.model_copy(update={"timestamp": None})

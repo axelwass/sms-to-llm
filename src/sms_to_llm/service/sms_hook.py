@@ -3,9 +3,7 @@ from pathlib import Path
 
 from sms_to_llm.config import Settings
 from sms_to_llm.database.base import BaseDatabase
-from sms_to_llm.database.factory import create_database
 from sms_to_llm.llm.base import BaseLLM
-from sms_to_llm.llm.factory import create_llm
 from sms_to_llm.schema.conversation import ConversationMessage
 from sms_to_llm.schema.sms import SmsHookResponse, SmsIncomingMessage
 from sms_to_llm.service.feedback_loop import FeedbackLoopService
@@ -14,15 +12,16 @@ from sms_to_llm.service.feedback_loop import FeedbackLoopService
 class SmsHookService:
     def __init__(
         self,
-        llm: BaseLLM | None = None,
-        database: BaseDatabase | None = None,
+        llm: BaseLLM,
+        database: BaseDatabase,
+        settings: Settings,
+        feedback_loop: FeedbackLoopService,
         history_limit: int = 5,
     ) -> None:
-        settings = Settings()
-        self.llm = llm or create_llm(settings)
-        self.database = database or create_database(settings)
+        self.llm = llm
+        self.database = database
         self.history_limit = history_limit
-        self.feedback_loop = FeedbackLoopService(database=self.database)
+        self.feedback_loop = feedback_loop
         self.system_prompt = self._load_system_prompt(settings.system_prompt_path)
 
     def _load_system_prompt(self, prompt_path: str) -> str:
