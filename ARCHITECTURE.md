@@ -8,24 +8,6 @@ The design favors small interfaces and explicit composition. Provider-specific d
 
 ## High-level Request Flow
 
-```mermaid
-flowchart TD
-    Client[SMS provider or test client] --> Endpoint[FastAPI endpoint]
-    Endpoint --> Auth[Authorization dependency]
-    Endpoint --> DI[Dependency graph]
-    DI --> Settings[Settings]
-    Settings --> LLMFactory[LLM factory]
-    Settings --> DBFactory[Database factory]
-    DBFactory --> Feedback[FeedbackLoopService]
-    LLMFactory --> Hook[SmsHookService]
-    Feedback --> Hook
-    DI --> Hook
-    Hook -->|0 or 1| Feedback
-    Hook -->|normal message| LLM[BaseLLM]
-    Hook --> Database[BaseDatabase]
-    Hook --> Response[SMS response]
-```
-
 For a normal message:
 
 1. The endpoint extracts and validates the incoming payload.
