@@ -69,6 +69,44 @@ def test_sms_hook_endpoint_accepts_twilio_form_payload(client: Any) -> None:
     assert response.json()["messageId"] == "SM123456789"
 
 
+def test_sms_hook_endpoint_rejects_empty_body_with_400(client: Any) -> None:
+    response: Any = client.post("/sms/hook", data="")
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Missing SMS payload"
+
+
+def test_test_sms_hook_requires_bearer_token(client: Any) -> None:
+    response: Any = client.post(
+        "/test/sms/hook",
+        json={
+            "from": "+36123456789",
+            "body": "Hi",
+            "messageId": "SM123456789",
+            "timestamp": "2026-07-27T12:00:00Z",
+        },
+    )
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Unauthorized"
+
+
+def test_test_sms_hook_accepts_valid_bearer_token(client: Any) -> None:
+    response: Any = client.post(
+        "/test/sms/hook",
+        json={
+            "from": "+36123456789",
+            "body": "Hi",
+            "messageId": "SM123456789",
+            "timestamp": "2026-07-27T12:00:00Z",
+        },
+        headers={"Authorization": "Bearer user"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["body"] == "Hello, I'm your LLM assistant."
+
+
 def test_sms_hook_service_builds_history_and_sends_response() -> None:
     service = SmsHookService(llm=llm, database=database, sms_provider=sms_provider, history_limit=2)
 
@@ -96,3 +134,39 @@ def test_sms_hook_service_builds_history_and_sends_response() -> None:
     stored_message = database.store_message.call_args[0][0]
     assert stored_message.incomingMessage == "Second question"
     assert stored_message.llmResponse == "Hello, I'm your LLM assistant."
+
+
+def test_sms_hook_service_short_circuits_on_feedback_input() -> None:
+    llm.reset_mock()
+    sms_provider.reset_mock()
+    database.reset_mock()
+    database.get_last_message.return_value = ConversationMessage(
+        id="conv_1",
+        phoneNumber="+36123456789",
+        incomingMessage="First question",
+        llmResponse="First answer",
+        providerMessageId="SM1",
+        status="completed",
+        createdAt="2026-07-27T12:00:00Z",
+    )
+    database.update_message_feedback.return_value = (
+        database.get_last_message.return_value.model_copy(update={"feedback": "positive"})
+    )
+
+    service = SmsHookService(llm=llm, database=database, sms_provider=sms_provider, history_limit=2)
+
+    payload = SmsIncomingMessage.model_validate(
+        {
+            "from": "+36123456789",
+            "body": "1",
+            "messageId": "SM3",
+            "timestamp": "2026-07-27T12:00:00Z",
+        }
+    )
+
+    response = service.accept_message(payload)
+
+    assert response.body == "Thanks for the feedback."
+    llm.generate_response.assert_not_called()
+    sms_provider.send_message.assert_called_with("+36123456789", "Thanks for the feedback.")
+    database.update_message_feedback.assert_called_once_with("conv_1", "positive")

@@ -6,7 +6,7 @@ from sms_to_llm.schema.conversation import ConversationMessage
 def test_mongo_database_implements_base_contract() -> None:
     database: BaseDatabase = MongoDatabase("mongodb://localhost:27017/sms_to_llm")
 
-    message = ConversationMessage(
+    first_message = ConversationMessage(
         id="conv_123",
         phoneNumber="+36123456789",
         incomingMessage="How do I reset my password?",
@@ -15,12 +15,27 @@ def test_mongo_database_implements_base_contract() -> None:
         status="completed",
         createdAt="2026-07-27T12:00:00Z",
     )
+    second_message = ConversationMessage(
+        id="conv_124",
+        phoneNumber="+36123456789",
+        incomingMessage="What about my billing?",
+        llmResponse="You can review charges in the billing section.",
+        providerMessageId="SM123456790",
+        status="completed",
+        createdAt="2026-07-27T12:05:00Z",
+    )
 
-    saved = database.store_message(message)
+    database.store_message(first_message)
+    database.store_message(second_message)
+
+    updated = database.update_message_feedback("conv_124", "positive")
 
     conversation = database.get_conversation("+36123456789")
     messages = database.list_messages("+36123456789")
 
-    assert saved.model_dump() == message.model_dump()
-    assert conversation == [message]
+    assert updated is not None
+    assert updated.feedback == "positive"
+    assert updated.providerMessageId == "SM123456790"
+    assert conversation[-1].feedback == "positive"
+    assert conversation[0].feedback is None
     assert messages == conversation

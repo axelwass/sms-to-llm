@@ -1,4 +1,8 @@
-from pydantic import BaseModel, ConfigDict
+from typing import Literal
+
+from pydantic import BaseModel, ConfigDict, Field
+
+FeedbackValue = Literal["positive", "negative"]
 
 
 class ConversationMessage(BaseModel):
@@ -11,3 +15,4 @@ class ConversationMessage(BaseModel):
     providerMessageId: str
     status: str
     createdAt: str
+    feedback: FeedbackValue | None = Field(default=None)

@@ -1,22 +1,39 @@
+import json
 from typing import Any
+from urllib.parse import parse_qs
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from twilio.request_validator import RequestValidator
 
+from sms_to_llm.auth.authorization import require_user_key
 from sms_to_llm.config import Settings
 from sms_to_llm.schema.sms import SmsHookResponse, SmsIncomingMessage
 from sms_to_llm.service.sms_hook import SmsHookService
 
 router = APIRouter(prefix="/sms", tags=["sms"])
+test_router = APIRouter(prefix="/test", tags=["test"])
 
 
 async def _extract_sms_payload(request: Request) -> SmsIncomingMessage:
-    content_type = request.headers.get("content-type", "")
+    content_type = request.headers.get("content-type", "").lower()
+    body = await request.body()
+
+    if not body:
+        raise HTTPException(status_code=400, detail="Missing SMS payload")
+
     if content_type.startswith("application/x-www-form-urlencoded"):
-        form_data = await request.form()
-        raw_payload: dict[str, Any] = dict(form_data)
+        raw_payload: dict[str, Any] = dict(await request.form())
+    elif content_type.startswith("application/json"):
+        try:
+            raw_payload = json.loads(body)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(status_code=400, detail="Invalid JSON payload") from exc
     else:
-        raw_payload = await request.json()
+        try:
+            raw_payload = json.loads(body)
+        except json.JSONDecodeError:
+            parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
+            raw_payload = {key: values[0] if values else "" for key, values in parsed.items()}
 
     normalized_payload = {
         "from": raw_payload.get("from") or raw_payload.get("From"),
@@ -28,7 +45,11 @@ async def _extract_sms_payload(request: Request) -> SmsIncomingMessage:
         or raw_payload.get("Timestamp")
         or raw_payload.get("DateCreated"),
     }
-    return SmsIncomingMessage.model_validate(normalized_payload)
+
+    try:
+        return SmsIncomingMessage.model_validate(normalized_payload)
+    except Exception as exc:  # pragma: no cover - endpoint validation guard
+        raise HTTPException(status_code=400, detail="Invalid SMS payload") from exc
 
 
 @router.post("/hook", response_model=SmsHookResponse)
@@ -49,6 +70,19 @@ async def receive_sms_hook(request: Request) -> SmsHookResponse:
         if not valid:
             raise HTTPException(status_code=403, detail="Invalid Twilio signature")
 
+    service = SmsHookService()
+    response = service.accept_message(payload)
+    if payload.timestamp is None:
+        return response.model_copy(update={"timestamp": None})
+    return response
+
+
+@test_router.post(
+    "/sms/hook",
+    response_model=SmsHookResponse,
+    dependencies=[Depends(require_user_key)],
+)
+async def receive_test_sms_hook(payload: SmsIncomingMessage) -> SmsHookResponse:
     service = SmsHookService()
     response = service.accept_message(payload)
     if payload.timestamp is None:

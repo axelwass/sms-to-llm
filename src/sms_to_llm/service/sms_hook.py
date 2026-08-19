@@ -6,6 +6,7 @@ from sms_to_llm.llm.base import BaseLLM
 from sms_to_llm.llm.factory import create_llm
 from sms_to_llm.schema.conversation import ConversationMessage
 from sms_to_llm.schema.sms import SmsHookResponse, SmsIncomingMessage
+from sms_to_llm.service.feedback_loop import FeedbackLoopService
 from sms_to_llm.sms.base import BaseSmsProvider
 from sms_to_llm.sms.factory import create_sms_provider
 
@@ -22,6 +23,7 @@ class SmsHookService:
         self.database = database or create_database()
         self.sms_provider = sms_provider or create_sms_provider()
         self.history_limit = history_limit
+        self.feedback_loop = FeedbackLoopService(database=self.database)
 
     def _build_history_prompt(self, phone_number: str, incoming_message: str) -> str:
         history = self.database.get_conversation(phone_number)
@@ -37,6 +39,19 @@ class SmsHookService:
 
     def accept_message(self, payload: SmsIncomingMessage) -> SmsHookResponse:
         timestamp = payload.timestamp or datetime.now(UTC).isoformat()
+
+        if self.feedback_loop.handle_feedback(payload.from_, payload.body):
+            self.sms_provider.send_message(payload.from_, "Thanks for the feedback.")
+            return SmsHookResponse.model_validate(
+                {
+                    "accepted": True,
+                    "from": payload.from_,
+                    "body": "Thanks for the feedback.",
+                    "messageId": payload.messageId,
+                    "timestamp": timestamp,
+                }
+            )
+
         prompt = self._build_history_prompt(payload.from_, payload.body)
         generated_response = self.llm.generate_response(prompt)
 
