@@ -2,6 +2,9 @@
 
 A small service that lets a system communicate with an LLM over SMS text messages.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the system design, dependency graph,
+provider boundaries, configuration, authorization, and testing strategy.
+
 ## Stack
 
 - FastAPI
@@ -16,6 +19,16 @@ A small service that lets a system communicate with an LLM over SMS text message
 ```bash
 uv sync --group dev
 ```
+
+Create your local environment file from the example:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and set the values for your machine. The application loads
+`.env` automatically when it starts. Keep `.env` local because it may contain
+secrets; `.env.example` is the safe template to commit.
 
 ## Quality checks
 
