@@ -51,27 +51,27 @@ uv run pytest -m integration
 uv run sms-to-llm
 ```
 
-## Ollama (WSL)
+## Ollama
 
-To use the Ollama backend from this project inside WSL, install Ollama in WSL itself.
+Install Ollama for your platform from [ollama.com/download](https://ollama.com/download).
 
-Install prerequisite:
-
-```bash
-sudo apt-get update
-sudo apt-get install -y zstd
-```
-
-Install Ollama:
+On Linux, you can install it with:
 
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ```
 
-Start Ollama and pull a small test model:
+Start the Ollama service and pull a small test model:
 
 ```bash
 ollama serve
+ollama pull tinyllama:1.1b
+```
+
+On macOS and Windows, start the Ollama desktop application before running the
+service. The command-line client can then be used to pull the model:
+
+```bash
 ollama pull tinyllama:1.1b
 ```
 
@@ -88,5 +88,5 @@ SYSTEM_PROMPT_PATH=prompts/system_prompt.md
 
 Cold start note:
 
-- The first Ollama request after loading a model can take longer in WSL.
+- The first Ollama request after loading a model can take longer.
 - Increase `OLLAMA_TIMEOUT_SECONDS` (for example to `120`) if you still see timeouts.
