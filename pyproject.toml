@@ -13,6 +13,7 @@ authors = [
 ]
 dependencies = [
   "fastapi[standard]>=0.116.0,<1.0.0",
+  "httpx>=0.28.0,<1.0.0",
   "pydantic>=2.11.0,<3.0.0",
   "pydantic-settings>=2.10.0,<3.0.0",
   "twilio>=9.6.0,<10.0.0",
@@ -44,6 +45,10 @@ check = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "-m \"not integration\""
+markers = [
+  "integration: tests that require external services and are excluded from default runs",
+]
 
 [tool.ruff]
 line-length = 100
