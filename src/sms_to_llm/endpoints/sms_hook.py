@@ -2,8 +2,9 @@ import json
 from typing import Any
 from urllib.parse import parse_qs
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from twilio.request_validator import RequestValidator
+from twilio.twiml.messaging_response import MessagingResponse
 
 from sms_to_llm.auth.authorization import require_user_key
 from sms_to_llm.config import Settings
@@ -52,8 +53,8 @@ async def _extract_sms_payload(request: Request) -> SmsIncomingMessage:
         raise HTTPException(status_code=400, detail="Invalid SMS payload") from exc
 
 
-@router.post("/hook", response_model=SmsHookResponse)
-async def receive_sms_hook(request: Request) -> SmsHookResponse:
+@router.post("/hook")
+async def receive_sms_hook(request: Request) -> Response:
     settings = Settings()
     payload = await _extract_sms_payload(request)
 
@@ -72,9 +73,10 @@ async def receive_sms_hook(request: Request) -> SmsHookResponse:
 
     service = SmsHookService()
     response = service.accept_message(payload)
-    if payload.timestamp is None:
-        return response.model_copy(update={"timestamp": None})
-    return response
+
+    twiml = MessagingResponse()
+    twiml.message(response.body)  # type: ignore[reportUnknownMemberType]
+    return Response(content=str(twiml), media_type="application/xml")
 
 
 @test_router.post(

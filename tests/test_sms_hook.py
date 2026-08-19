@@ -1,12 +1,13 @@
 from typing import Any
 from unittest.mock import Mock
 
+from pytest import MonkeyPatch
+
 from sms_to_llm.database.base import BaseDatabase
 from sms_to_llm.llm.base import BaseLLM
 from sms_to_llm.schema.conversation import ConversationMessage
 from sms_to_llm.schema.sms import SmsIncomingMessage
 from sms_to_llm.service.sms_hook import SmsHookService
-from sms_to_llm.sms.base import BaseSmsProvider
 
 llm = Mock(spec=BaseLLM)
 llm.generate_response.return_value = "Hello, I'm your LLM assistant."
@@ -24,11 +25,13 @@ database.get_conversation.return_value = [
     )
 ]
 
-sms_provider = Mock(spec=BaseSmsProvider)
-sms_provider.send_message.return_value = "sms_123"
 
+def test_sms_hook_endpoint_accepts_message_payload(
+    client: Any,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
 
-def test_sms_hook_endpoint_accepts_message_payload(client: Any) -> None:
     payload: dict[str, Any] = {
         "from": "+36123456789",
         "body": "Hi",
@@ -39,16 +42,16 @@ def test_sms_hook_endpoint_accepts_message_payload(client: Any) -> None:
     response: Any = client.post("/sms/hook", json=payload)
 
     assert response.status_code == 200
-    assert response.json() == {
-        "accepted": True,
-        "from": "+36123456789",
-        "messageId": "SM123456789",
-        "body": "Hello, I'm your LLM assistant.",
-        "timestamp": "2026-07-27T12:00:00Z",
-    }
+    assert response.headers["content-type"].startswith("application/xml")
+    assert "<Message>Hello, I'm your LLM assistant.</Message>" in response.text
 
 
-def test_sms_hook_endpoint_accepts_twilio_form_payload(client: Any) -> None:
+def test_sms_hook_endpoint_accepts_twilio_form_payload(
+    client: Any,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+
     payload = {
         "From": "+36123456789",
         "Body": "Hello from Twilio",
@@ -64,9 +67,8 @@ def test_sms_hook_endpoint_accepts_twilio_form_payload(client: Any) -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["from"] == "+36123456789"
-    assert response.json()["body"] == "Hello, I'm your LLM assistant."
-    assert response.json()["messageId"] == "SM123456789"
+    assert response.headers["content-type"].startswith("application/xml")
+    assert "<Message>Hello, I'm your LLM assistant.</Message>" in response.text
 
 
 def test_sms_hook_endpoint_rejects_empty_body_with_400(client: Any) -> None:
@@ -91,7 +93,12 @@ def test_test_sms_hook_requires_bearer_token(client: Any) -> None:
     assert response.json()["detail"] == "Unauthorized"
 
 
-def test_test_sms_hook_accepts_valid_bearer_token(client: Any) -> None:
+def test_test_sms_hook_accepts_valid_bearer_token(
+    client: Any,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "mock")
+
     response: Any = client.post(
         "/test/sms/hook",
         json={
@@ -108,7 +115,7 @@ def test_test_sms_hook_accepts_valid_bearer_token(client: Any) -> None:
 
 
 def test_sms_hook_service_builds_history_and_sends_response() -> None:
-    service = SmsHookService(llm=llm, database=database, sms_provider=sms_provider, history_limit=2)
+    service = SmsHookService(llm=llm, database=database, history_limit=2)
 
     payload = SmsIncomingMessage.model_validate(
         {
@@ -124,12 +131,9 @@ def test_sms_hook_service_builds_history_and_sends_response() -> None:
     assert response.body == "Hello, I'm your LLM assistant."
     llm.generate_response.assert_called_once()
     prompt = llm.generate_response.call_args[0][0]
-    assert prompt.startswith("User: First question")
+    assert "System:" in prompt
+    assert "User: First question" in prompt
     assert "User: Second question" in prompt
-    sms_provider.send_message.assert_called_once_with(
-        "+36123456789",
-        "Hello, I'm your LLM assistant.",
-    )
     database.store_message.assert_called_once()
     stored_message = database.store_message.call_args[0][0]
     assert stored_message.incomingMessage == "Second question"
@@ -138,7 +142,6 @@ def test_sms_hook_service_builds_history_and_sends_response() -> None:
 
 def test_sms_hook_service_short_circuits_on_feedback_input() -> None:
     llm.reset_mock()
-    sms_provider.reset_mock()
     database.reset_mock()
     database.get_last_message.return_value = ConversationMessage(
         id="conv_1",
@@ -153,7 +156,7 @@ def test_sms_hook_service_short_circuits_on_feedback_input() -> None:
         database.get_last_message.return_value.model_copy(update={"feedback": "positive"})
     )
 
-    service = SmsHookService(llm=llm, database=database, sms_provider=sms_provider, history_limit=2)
+    service = SmsHookService(llm=llm, database=database, history_limit=2)
 
     payload = SmsIncomingMessage.model_validate(
         {
@@ -168,5 +171,4 @@ def test_sms_hook_service_short_circuits_on_feedback_input() -> None:
 
     assert response.body == "Thanks for the feedback."
     llm.generate_response.assert_not_called()
-    sms_provider.send_message.assert_called_with("+36123456789", "Thanks for the feedback.")
     database.update_message_feedback.assert_called_once_with("conv_1", "positive")
